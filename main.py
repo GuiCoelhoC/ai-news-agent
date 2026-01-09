@@ -6,12 +6,9 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
-# Garante que tens estas bibliotecas instaladas: pip install crewai crewai-tools markdown python-dotenv
-from crewai_tools import SerperDevTool, ScrapeWebsiteTool
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool 
 from crewai.tools import BaseTool
 
-
-# 0. CARREGAR SEGREDOS
 load_dotenv()
 
 # --- 1. FERRAMENTA DE EMAIL ---
@@ -33,19 +30,19 @@ class EmailTool(BaseTool):
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = sender_email 
-        msg['Subject'] = f"Briefing AI (Com Fontes): {datetime.now().strftime('%d/%m')}"
+        msg['Subject'] = f"Relatório Híbrido: K8s + AI Agents ({datetime.now().strftime('%d/%m')})"
 
         html_body = f"""
         <html>
           <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto;">
-            <div style="background-color: #1a252f; padding: 20px; text-align: center;">
-              <h2 style="color: #ffffff; margin: 0;">📰 Relatório de Inteligência</h2>
+            <div style="background-color: #2c3e50; padding: 20px; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0;">🧠 HomeLab Intelligence</h2>
             </div>
             <div style="padding: 30px; border: 1px solid #ddd;">
               {html_content} 
             </div>
             <div style="text-align: center; padding-top: 20px; font-size: 12px; color: #999;">
-              <p>Fontes verificadas e datadas.</p>
+              <p>Fontes verificadas. Paywalls ignorados.</p>
             </div>
           </body>
         </html>
@@ -62,79 +59,104 @@ class EmailTool(BaseTool):
         except Exception as e:
             return f"Erro SMTP: {str(e)}"
 
-# --- 2. CONFIGURAÇÃO TEMPORAL (Janela de 45 dias) ---
+# --- 2. CONFIGURAÇÃO TEMPORAL ---
 data_hoje = datetime.now()
-data_inicio = data_hoje - timedelta(days=45)
+data_inicio = data_hoje - timedelta(days=14) # Aumentei a janela para apanhar mais coisas
 periodo_str = f"{data_inicio.strftime('%Y-%m-%d')} a {data_hoje.strftime('%Y-%m-%d')}"
 
-
-#--- Ferramentas ---
 search_tool = SerperDevTool()
 scrape_tool = ScrapeWebsiteTool()
 email_tool = EmailTool()
 
-# --- 3. AGENTES ---
+# --- 3. AGENTES (ESPECIALIZADOS) ---
 
-# O "Aspira" que traz tudo o que encontra
 researcher = Agent(
-    role='Analista de Inteligência Profunda',
-    goal=f'Ler o CONTEÚDO REAL das páginas sobre Kubernetes e Agentic AI ({periodo_str}).',
-    backstory='Não confias em manchetes. Quando encontras um link interessante no Google, USAS O SCRAPER para ler o artigo completo e extrair os detalhes técnicos reais.',
+    role='Investigador de GitHub e Docs',
+    goal=f'Encontrar ferramentas REAIS e Updates REAIS sobre Kubernetes e AI Agents ({periodo_str}).',
+    backstory='Odeias artigos de opinião do Medium ou LinkedIn. Só queres saber de: '
+          'GitHub Repos, HuggingFace Papers, CNCF Blog Posts e Documentação Oficial. '
+          'Se um site der erro de JavaScript, tenta outro. '
+          'SE NÃO ENCONTRARES 2+ artigos por secção, tenta queries mais largas.',
     verbose=True,
     memory=True,
     tools=[search_tool, scrape_tool],
     allow_delegation=False
 )
 
-# O Jornalista rigoroso
 writer = Agent(
-    role='Editor Técnico',
-    goal='Sintetizar a informação profunda em bullets claros.',
-    backstory='Recebes relatórios detalhados. O teu trabalho é limpar o ruído e escrever o resumo final. Obrigatório manter os LINKS originais.',
+    role='Editor Técnico Sénior',
+    goal='Compilar um relatório OBRIGATORIAMENTE dividido em duas secções.',
+    backstory='A tua regra de ouro é a diversidade. Não podes enviar o email só com Kubernetes. Tens de ter a secção de "Agentic AI". Se o texto estiver curto, és despedido.',
     verbose=True,
     memory=True,
     allow_delegation=False
 )
 
 auditor = Agent(
-    role='Auditor de Qualidade',
-    goal='Garantir links e envio.',
-    backstory='Verificas se existem links. Se sim, envias.',
+    role='Gatekeeper',
+    goal='Garantir que existem as DUAS secções antes de enviar.',
+    backstory='Verificas se há notícias de AI e notícias de K8s. Se faltar uma, falhas a task. Se estiver tudo bem, envias.',
     verbose=True,
     memory=True,
     tools=[email_tool],
     allow_delegation=False
 )
 
-# --- TAREFAS ---
+# --- 4. TAREFAS (DIVIDIR PARA CONQUISTAR) ---
 
 task_search = Task(
     description=(
-        f"1. Usa o Search para encontrar 4 a 5 URLs recentes sobre 'Kubernetes Gateway API' ou 'Agentic AI Patterns'.\n"
-        f"2. IMPORTANTE: Para CADA URL promissor, usa a ferramenta 'ScrapeWebsiteTool' para ler o conteúdo da página.\n"
-        f"3. Extrai: O problema que a ferramenta resolve e exemplos de código se houver."
+        f"Search for recent news (last 14 days) on:\n"
+        f"1. **Kubernetes**: Focus on new features, security updates, Gateway API, networking tools\n"
+        f"2. **AI Agents**: Focus on frameworks (LangChain, CrewAI, AutoGen), deployment patterns\n"
+        f"\n"
+        f"RULES:\n"
+        f"- Scrape full articles when possible (GitHub releases, official blogs)\n"
+        f"- Skip: Medium paywalls, opinion pieces, outdated docs\n"
+        f"- Prefer: GitHub releases, HuggingFace papers, CNCF blog, official framework docs\n"
+        f"- DEDUPLICATION: Se encontrares a mesma notícia em múltiplas fontes, "
+        f"guarda apenas a FONTE OFICIAL (GitHub > CNCF > outras). Ignore duplicatas."
     ),
-    expected_output='Relatório detalhado baseado no CONTEÚDO COMPLETO dos sites, com URLs.',
-    agent=researcher
+    expected_output=(
+        "Structured list (deduplicated):\n"
+        "## Kubernetes (2-3 UNIQUE items)\n"
+        "- Title | Primary Source | 1-line summary\n\n"
+        "## AI Agents (2-3 UNIQUE items)\n"
+        "- Title | Primary Source | 1-line summary\n\n"
+        "Note: Each item from a DIFFERENT topic/announcement (not duplicates)"
+    ),
+    agent=researcher,
+    tools=[search_tool, scrape_tool]
 )
 
 task_write = Task(
     description=(
-        "Escreve a newsletter baseada na pesquisa profunda.\n"
-        "Formato:\n"
-        "## Título (Data)\n"
-        "* **O que é:** Resumo técnico.\n"
-        "* **Por que importa:** Impacto real.\n"
-        "* [Ler Fonte Completa](URL)"
+        "Escreve o relatório final com esta estrutura EXATA:\n"
+        "# 🐳 Atualizações Kubernetes\n"
+        "- **Título**: [Link](url_completo_aqui) - Parágrafo com 1-2 frases sobre PORQUE é importante\n"
+        "- **Título**: [Link](url_completo_aqui) - Parágrafo com 1-2 frases técnicas\n\n"
+        "# 🤖 O Mundo dos Agentes AI\n"
+        "- **Título**: [Link](url_completo_aqui) - Parágrafo com 1-2 frases sobre PORQUE é importante\n"
+        "- **Título**: [Link](url_completo_aqui) - Parágrafo com 1-2 frases técnicas\n"
+        "\nRegra: CADA notícia deve ter 50-100 palavras explicando utilidade. Não sejas vago. "
+        "TODOS os links devem ser URLs completos (ex: https://github.com/kubernetes/kubernetes/releases)."
     ),
-    expected_output='Newsletter rica em detalhes técnicos e formatada em Markdown.',
+    expected_output='Newsletter completa em Markdown com links funcionais (formato: [Título](https://...)).',
     agent=writer,
     context=[task_search]
 )
 
 task_audit = Task(
-    description="Valida se tem links e envia o email.",
-    expected_output='Email enviado.',
+    description=(
+        "Valida:\n"
+        "1. Existem as 2 secções (K8s e AI)? SIM/NÃO\n"
+        "2. Cada item tem [Link](url) em formato Markdown? SIM/NÃO\n"
+        "3. Cada item tem 1-2 frases explicando PORQUE é importante? SIM/NÃO\n"
+        "4. Não há duplicatas entre secções? SIM/NÃO\n"
+        "\nSe TODOS forem SIM: envia o email.\n"
+        "Se ALGUM for NÃO: rejeita e explica qual falhou."
+    ),
+    expected_output='Email enviado com conteúdo validado OU erro explicado.',
     agent=auditor,
     context=[task_write]
 )
@@ -145,5 +167,9 @@ crew = Crew(
     process=Process.sequential
 )
 
-print(f"### A CORRER COM SCRAPING REAL ###")
-crew.kickoff()
+# No final, antes de crew.kickoff():
+try:
+    print(f"### A INICIAR BUSCA HÍBRIDA (K8s + AI) ###")
+    crew.kickoff()
+except Exception as e:
+    print(f"❌ Erro na execução: {str(e)}")
