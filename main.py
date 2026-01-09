@@ -6,9 +6,10 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
-# CORREÇÃO DO IMPORT (Caso ainda tenhas o erro da screenshot anterior)
-from crewai_tools import SerperDevTool 
+# Garante que tens estas bibliotecas instaladas: pip install crewai crewai-tools markdown python-dotenv
+from crewai_tools import SerperDevTool, ScrapeWebsiteTool
 from crewai.tools import BaseTool
+
 
 # 0. CARREGAR SEGREDOS
 load_dotenv()
@@ -66,90 +67,83 @@ data_hoje = datetime.now()
 data_inicio = data_hoje - timedelta(days=45)
 periodo_str = f"{data_inicio.strftime('%Y-%m-%d')} a {data_hoje.strftime('%Y-%m-%d')}"
 
+
+#--- Ferramentas ---
 search_tool = SerperDevTool()
+scrape_tool = ScrapeWebsiteTool()
 email_tool = EmailTool()
 
-# --- 3. AGENTES (REESTRUTURADOS) ---
+# --- 3. AGENTES ---
 
 # O "Aspira" que traz tudo o que encontra
 researcher = Agent(
-    role='Analista de Dados Brutos',
-    goal=f'Mapear TODAS as novidades relevantes sobre Kubernetes e Agentic AI ({periodo_str}).',
-    backstory='A tua função é criar uma base de dados. Não resumes nada. Copias o Título, a URL, a Data e um excerto técnico. Preferes excesso de informação a falta dela.',
+    role='Analista de Inteligência Profunda',
+    goal=f'Ler o CONTEÚDO REAL das páginas sobre Kubernetes e Agentic AI ({periodo_str}).',
+    backstory='Não confias em manchetes. Quando encontras um link interessante no Google, USAS O SCRAPER para ler o artigo completo e extrair os detalhes técnicos reais.',
     verbose=True,
     memory=True,
-    tools=[search_tool],
+    tools=[search_tool, scrape_tool],
     allow_delegation=False
 )
 
 # O Jornalista rigoroso
 writer = Agent(
-    role='Editor de Newsletter Técnica',
-    goal='Criar um relatório onde CADA afirmação tem uma fonte clicável.',
-    backstory='Odeias textos vagos. Se escreves sobre uma "nova feature", tens de colocar o link para o GitHub ou Release Note. O teu formato é denso mas rico em referências.',
+    role='Editor Técnico',
+    goal='Sintetizar a informação profunda em bullets claros.',
+    backstory='Recebes relatórios detalhados. O teu trabalho é limpar o ruído e escrever o resumo final. Obrigatório manter os LINKS originais.',
     verbose=True,
     memory=True,
     allow_delegation=False
 )
 
-# O Auditor (Para garantir que os links estão lá)
 auditor = Agent(
-    role='Auditor de Fontes',
-    goal='Garantir que o email não sai sem links e datas.',
-    backstory='És um robô de validação. Se o texto não tiver links [Fonte](url), bloqueias. Se tiver "palha" motivacional, mandas cortar. Só aprovas factos.',
+    role='Auditor de Qualidade',
+    goal='Garantir links e envio.',
+    backstory='Verificas se existem links. Se sim, envias.',
     verbose=True,
     memory=True,
     tools=[email_tool],
     allow_delegation=False
 )
 
-# --- 4. TAREFAS (COM FORMATAÇÃO FORÇADA) ---
+# --- TAREFAS ---
 
 task_search = Task(
     description=(
-        f"Realiza uma pesquisa exaustiva sobre 'Kubernetes Releases', 'Kubernetes CVE {data_hoje.year}', 'Agentic AI Frameworks' e 'LLM Agents Tools'.\n"
-        f"Janela de tempo: {periodo_str}.\n"
-        "Coleta no mínimo 6 a 8 itens relevantes. Para cada item, guarda: Título, URL Oficial, Data e Resumo Técnico."
+        f"1. Usa o Search para encontrar 4 a 5 URLs recentes sobre 'Kubernetes Gateway API' ou 'Agentic AI Patterns'.\n"
+        f"2. IMPORTANTE: Para CADA URL promissor, usa a ferramenta 'ScrapeWebsiteTool' para ler o conteúdo da página.\n"
+        f"3. Extrai: O problema que a ferramenta resolve e exemplos de código se houver."
     ),
-    expected_output='Uma lista crua com URLs e dados técnicos.',
+    expected_output='Relatório detalhado baseado no CONTEÚDO COMPLETO dos sites, com URLs.',
     agent=researcher
 )
 
 task_write = Task(
     description=(
-        "Escreve a newsletter final em Markdown.\n"
-        "REGRAS RÍGIDAS DE FORMATO:\n"
-        "1. Usa este formato para cada notícia:\n"
-        "   - **Título da Notícia** (Data: DD/MM)\n"
-        "   - Resumo de 2 linhas explicando o impacto técnico.\n"
-        "   - [Ler Fonte Oficial](URL_AQUI) <--- OBRIGATÓRIO\n\n"
-        "2. Agrupa por categorias: 'Kubernetes & Cloud Native' e 'Ecossistema Agentic AI'.\n"
-        "3. Se não houver data exata, marca como (Recente).\n"
-        "4. NÃO expliques o que é Kubernetes. O leitor já sabe."
+        "Escreve a newsletter baseada na pesquisa profunda.\n"
+        "Formato:\n"
+        "## Título (Data)\n"
+        "* **O que é:** Resumo técnico.\n"
+        "* **Por que importa:** Impacto real.\n"
+        "* [Ler Fonte Completa](URL)"
     ),
-    expected_output='Newsletter formatada em Markdown com links funcionais.',
+    expected_output='Newsletter rica em detalhes técnicos e formatada em Markdown.',
     agent=writer,
     context=[task_search]
 )
 
-task_audit_and_send = Task(
-    description=(
-        "Verifica se o texto do Editor tem LINKS para todas as notícias. "
-        "Se o texto parecer 'vazio' ou genérico, reescreve a secção problemática mantendo os links. "
-        "Se estiver bom, envia usando a ferramenta de email."
-    ),
+task_audit = Task(
+    description="Valida se tem links e envia o email.",
     expected_output='Email enviado.',
     agent=auditor,
     context=[task_write]
 )
 
-# --- 5. EXECUÇÃO ---
 crew = Crew(
     agents=[researcher, writer, auditor],
-    tasks=[task_search, task_write, task_audit_and_send],
+    tasks=[task_search, task_write, task_audit],
     process=Process.sequential
 )
 
-print(f"### A INICIAR NEWSLETTER V5 (MODE: FONTE OBRIGATÓRIA) ###")
-result = crew.kickoff()
-print("########################\nTERMINADO\n########################")
+print(f"### A CORRER COM SCRAPING REAL ###")
+crew.kickoff()
