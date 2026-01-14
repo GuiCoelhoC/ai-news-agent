@@ -1,5 +1,5 @@
 from crewai import Agent
-from src.tools.dataIngestion import GitHubTool, DevToTool, RSSFeedTool 
+from src.tools.DataIngestion import GitHubTool, DevToTool, RSSFeedTool 
 from src.tools.email_tool import EmailTool
 
 class NewsAgents:
