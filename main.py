@@ -8,6 +8,16 @@ from src.tools.email_tool import EmailTool
 
 load_dotenv()
 
+def save_log(content: str):
+    """Guarda o output do último run num ficheiro log"""
+    os.makedirs("logs", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"logs/run_{timestamp}.log"
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"\n📝 Log guardado em: {log_file}")
+    return log_file
+
 def run():
     data_hoje = datetime.now()
     data_inicio = data_hoje - timedelta(days=7)
@@ -46,14 +56,20 @@ def run():
 
     result = crew.kickoff()
     
-    # --- 6. ENVIO DE EMAIL (código direto, não agent) ---
+    # Converter CrewOutput para string
+    result_str = str(result.raw_output) if hasattr(result, 'raw_output') else str(result)
+    
+    # --- 6. GUARDAR LOG ---
+    log_file = save_log(result_str)
+    
+    # --- 7. ENVIO DE EMAIL (código direto, não agent) ---
     email_tool = EmailTool()
-    email_result = email_tool._run(result)
+    email_result = email_tool._run(result_str)
     
     print("\n\n########################")
     print("✅ EXECUÇÃO TERMINADA COM SUCESSO")
     print("########################\n")
-    print(result)
+    print(result_str)
     print("\n📧 " + email_result)
 
 if __name__ == "__main__":
