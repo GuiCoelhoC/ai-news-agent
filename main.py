@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from crewai import Crew, Process
 from src.agents.news_agents import NewsAgents
 from src.tasks.news_tasks import NewsTasks
+from src.tools.email_tool import EmailTool
 
 load_dotenv()
 
@@ -21,35 +22,39 @@ def run():
 
     # --- 3. CRIAR AGENTES (EQUIPA) ---
     data_engineer = agents.researcher(periodo_str) 
+    analyst = agents.analyst()
     editor = agents.writer()
-    auditor = agents.auditor()
 
     # --- 4. CRIAR TAREFAS (WORKFLOW) ---
-    # Passo 1: Coletar dados brutos das APIs (GitHub, RSS, Dev.to)
+    # Passo 1: Coletar dados brutos das APIs (RSS, Dev.to)
     task_collect = tasks.search_task(data_engineer, periodo_str)
 
-    # Passo 2: Escrever o relatório baseado SÓ no que foi coletado
-    # O contexto diz ao CrewAI: "Espera pelo output da task_collect antes de começar"
-    task_write = tasks.write_task(editor, context=[task_collect])
+    # Passo 2: Analisar e filtrar por impacto
+    task_analyze = tasks.analyze_task(analyst, context=[task_collect])
 
-    # Passo 3: Validar e Enviar Email
-    task_audit = tasks.audit_task(auditor, context=[task_write])
+    # Passo 3: Escrever o relatório baseado SÓ nas notícias aprovadas
+    task_write = tasks.write_task(editor, context=[task_analyze])
 
     # --- 5. EXECUÇÃO DA CREW ---
     crew = Crew(
-        agents=[data_engineer, editor, auditor],
-        tasks=[task_collect, task_write, task_audit],
-        process=Process.sequential, # Sequencial é obrigatório aqui (Coleta -> Escrita -> Envio)
-        memory=True,                # Ativa a persistência para evitar repetições em execuções futuras
-        verbose=True                # Para veres os logs bonitos no terminal
+        agents=[data_engineer, analyst, editor],
+        tasks=[task_collect, task_analyze, task_write],
+        process=Process.sequential, # Sequencial: Coleta -> Análise -> Escrita
+        memory=True,                # Ativa a persistência para evitar repetições
+        verbose=True                # Logs no terminal
     )
 
     result = crew.kickoff()
+    
+    # --- 6. ENVIO DE EMAIL (código direto, não agent) ---
+    email_tool = EmailTool()
+    email_result = email_tool._run(result)
     
     print("\n\n########################")
     print("✅ EXECUÇÃO TERMINADA COM SUCESSO")
     print("########################\n")
     print(result)
+    print("\n📧 " + email_result)
 
 if __name__ == "__main__":
     run()
