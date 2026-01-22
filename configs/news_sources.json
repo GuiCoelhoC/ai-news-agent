@@ -1,0 +1,21 @@
+{
+  "rss_feeds": [
+    {
+      "name": "Kubernetes Blog",
+      "url": "https://kubernetes.io/feed.xml"
+    },
+    {
+      "name": "CNCF Blog",
+      "url": "https://www.cncf.io/feed/"
+    },
+    {
+      "name": "Hugging Face Blog",
+      "url": "https://huggingface.co/blog/feed.xml"
+    }
+  ],
+  "devto_tags": [
+    "kubernetes",
+    "artificial-intelligence",
+    "devops"
+  ]
+}

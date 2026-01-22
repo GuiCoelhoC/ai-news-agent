@@ -6,13 +6,11 @@ class NewsTasks:
             description=(
                 f"Usa as tuas ferramentas de API para coletar dados recentes ({periodo}):\n\n"
                 
-                f"1. **BLOGS TÉCNICOS** (Usa RSSFeedTool):\n"
-                f"   - Kubernetes Blog: 'https://kubernetes.io/feed.xml'\n"
-                f"   - CNCF Blog: 'https://www.cncf.io/feed/'\n"
-                f"   - Hugging Face Blog: 'https://huggingface.co/blog/feed.xml'\n\n"
+                f"1. **BLOGS TÉCNICOS** (Usa RSSFeedTool com fonte 'config'):\n"
+                f"   - Carrega automaticamente dos blogs configurados em configs/news_sources.json\n\n"
                 
-                f"2. **ARTIGOS COMUNIDADE** (Usa DevToTool):\n"
-                f"   - Tags: 'kubernetes, artificial-intelligence, devops'\n\n"
+                f"2. **ARTIGOS COMUNIDADE** (Usa DevToTool com tags 'config'):\n"
+                f"   - Carrega automaticamente as tags configuradas em configs/news_sources.json\n\n"
                 
                 f"OUTPUT ESPERADO: Uma lista crua com todos os dados coletados das 2 fontes."
             ),
