@@ -5,6 +5,8 @@ from crewai import Crew, Process
 from src.agents.news_agents import NewsAgents
 from src.tasks.news_tasks import NewsTasks
 from src.tools.email_tool import EmailTool
+from src.utils.NewsProcessor import NewsProcessor
+from src.utils.NewsParser import NewsParser
 
 load_dotenv()
 
@@ -59,10 +61,52 @@ def run():
     # Converter CrewOutput para string
     result_str = str(result.raw_output) if hasattr(result, 'raw_output') else str(result)
     
-    # --- 6. GUARDAR LOG ---
+    # --- 6. PERSISTÊNCIA DE NOTÍCIAS ---
+    news_processor = NewsProcessor()
+    parser = NewsParser()
+    
+    # Parse e extração de notícias do output da crew
+    extracted_news = parser.parse_crew_output(result_str)
+    extracted_news = parser.filter_by_length(extracted_news, min_title_length=10)
+    
+    print(f"\n📡 Notícias extraídas: {len(extracted_news)}")
+    
+    # Registar cada notícia aprovada no banco de dados
+    new_news_count = 0
+    duplicate_count = 0
+    
+    for news in extracted_news:
+        was_registered = news_processor.register_approved_news(
+            title=news['title'],
+            url=news['url'],
+            source=news['source'],
+            score=8  # Score 8 = aprovada pela crew
+        )
+        if was_registered:
+            new_news_count += 1
+            print(f"  ✅ Nova: {news['title'][:60]}...")
+        else:
+            duplicate_count += 1
+            print(f"  ⏭️  Duplicada: {news['title'][:60]}...")
+    
+    # Limpar notícias antigas (> 90 dias)
+    removed = news_processor.cleanup_old(days=90)
+    if removed > 0:
+        print(f"\n🗑️  {removed} notícias antigas removidas do banco de dados")
+    
+    # Estatísticas do banco de dados
+    print(f"\n📊 Estatísticas do Banco de Dados:")
+    db_stats = news_processor.get_database_stats()
+    print(f"   Total de notícias processadas: {db_stats['total_processed']}")
+    print(f"   Novas neste run: {new_news_count}")
+    print(f"   Duplicatas neste run: {duplicate_count}")
+    print(f"   Última atualização: {db_stats['last_update']}")
+    print(f"   Por fonte: {db_stats['by_source']}")
+    
+    # --- 7. GUARDAR LOG ---
     log_file = save_log(result_str)
     
-    # --- 7. ENVIO DE EMAIL (código direto, não agent) ---
+    # --- 8. ENVIO DE EMAIL (código direto, não agent) ---
     email_tool = EmailTool()
     email_result = email_tool._run(result_str)
     

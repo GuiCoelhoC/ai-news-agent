@@ -1,0 +1,7 @@
+crewai==0.77.0
+python-dotenv==1.0.0
+requests==2.31.0
+feedparser==6.0.10
+markdown==3.5.1
+pydantic==2.5.0
+pydantic-core==2.14.5
