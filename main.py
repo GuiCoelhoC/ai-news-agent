@@ -1,14 +1,25 @@
 import os
+import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from crewai import Crew, Process
 from src.agents.news_agents import NewsAgents
 from src.tasks.news_tasks import NewsTasks
 from src.tools.email_tool import EmailTool
-from src.utils.NewsProcessor import NewsProcessor
-from src.utils.NewsParser import NewsParser
 
 load_dotenv()
+
+def parse_analyst_output(output_text: str) -> int:
+    """
+    Extrai estatísticas do output do analyst.
+    Retorna: total_notícias aprovadas
+    """
+    # Conta quantas notícias foram aprovadas (padrão: "Score: [7-10]")
+    approved_pattern = r'Score:\s*([7-9]|10)'
+    approved_matches = re.findall(approved_pattern, output_text)
+    total_approved = len(approved_matches)
+    
+    return total_approved
 
 def save_log(content: str):
     """Guarda o output do último run num ficheiro log"""
@@ -25,8 +36,9 @@ def run():
     data_inicio = data_hoje - timedelta(days=7)
     periodo_str = f"{data_inicio.strftime('%Y-%m-%d')} a {data_hoje.strftime('%Y-%m-%d')}"
 
-    print(f"A INICIAR MOTOR DE INGESTÃO DE DADOS")
-    print(f"Período de Análise: {periodo_str}")
+    print(f"🚀 A INICIAR MOTOR DE INGESTÃO DE DADOS")
+    print(f"📅 Período de Análise: {periodo_str}")
+    print("=" * 60)
 
     # --- 2. INSTANCIAR FÁBRICAS ---
     agents = NewsAgents()
@@ -56,28 +68,42 @@ def run():
         verbose=True                # Logs no terminal
     )
 
+    print("\n⏳ Executando pipeline...\n")
     result = crew.kickoff()
     
     # Converter CrewOutput para string
     result_str = str(result.raw_output) if hasattr(result, 'raw_output') else str(result)
     
-    # --- 6. PERSISTÊNCIA DE NOTÍCIAS ---
-    news_processor = NewsProcessor()
-    parser = NewsParser()
+    # Extrai estatísticas do analyst
+    total_approved = parse_analyst_output(result_str)
     
-    # Parse e extração de notícias do output da crew
-    extracted_news = parser.parse_crew_output(result_str)
-    extracted_news = parser.filter_by_length(extracted_news, min_title_length=10)
+    # --- 6. GUARDAR LOG ---
+    log_file = save_log(result_str)
     
-    print(f"\n📡 Notícias extraídas: {len(extracted_news)}")
+    # --- 7. ENVIO DE EMAIL (código direto, não agent) ---
+    email_tool = EmailTool()
+    email_result = email_tool._run(result_str)
     
-    # Registar cada notícia aprovada no banco de dados
-    new_news_count = 0
-    duplicate_count = 0
+    # --- 8. PRINT STATS ---
+    stats = f"""
+╔══════════════════════════════════════╗
+║        📊 EXECUÇÃO TERMINADA         ║
+╚══════════════════════════════════════╝
+
+✅ Notícias aprovadas (Score >= 7): {total_approved}
+📝 Log: {log_file}
+📧 Email: {email_result}
+
+{'─' * 60}
+RESULTADO DO PIPELINE:
+{'─' * 60}
+"""
     
-    for news in extracted_news:
-        was_registered = news_processor.register_approved_news(
-            title=news['title'],
+    print(stats)
+    print(result_str)
+
+if __name__ == "__main__":
+    run()
             url=news['url'],
             source=news['source'],
             score=8  # Score 8 = aprovada pela crew
