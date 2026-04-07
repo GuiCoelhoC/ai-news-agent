@@ -219,10 +219,6 @@ TEMPO: Semana 2, Segunda-feira 09:00 (7 dias depois)
         "total_processed": 0,  ← Continuou vazio!
         "last_update": "2026-01-22T09:00:00"
       }
-
-⚠️  PROBLEMA OBSERVADO:
-    As notícias não estão sendo persistidas!
-    A NewsDatabase.add_news() nunca é chamada.
 ```
 
 ---
@@ -271,5 +267,3 @@ Para completar a persistência, precisa **parsear o output da Crew** e chamar:
 ```python
 news_processor.register_approved_news(title, url, source, score)
 ```
-
-Quer que eu implemente isso?
